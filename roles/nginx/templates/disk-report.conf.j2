@@ -1,0 +1,12 @@
+# Managed by Ansible - manual changes will be overwritten
+server {
+    listen {{ nginx_listen_port }};
+    server_name _;
+
+    root {{ nginx_report_root }};
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}

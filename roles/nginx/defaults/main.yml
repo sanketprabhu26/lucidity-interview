@@ -1,0 +1,4 @@
+nginx_listen_port: 8080
+nginx_report_root: /var/www/disk-report
+
+nginx_report_owner: "{{ ansible_facts['user_id'] }}"

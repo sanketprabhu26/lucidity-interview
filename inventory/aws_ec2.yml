@@ -1,0 +1,24 @@
+
+plugin: amazon.aws.aws_ec2
+
+regions:
+  - us-east-1
+
+
+filters:
+  instance-state-name: running
+  vpc-id: <VPC_ID>            
+
+exclude_filters:
+  - tag:Role: ansible-controller
+
+hostnames:
+  - instance-id
+
+
+compose:
+  ansible_aws_ssm_instance_id: instance_id
+
+
+groups:
+  targets: true

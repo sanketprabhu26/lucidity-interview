@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Disk Usage Report</title>
+  <style>
+    body  { font-family: sans-serif; margin: 2rem; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+    th    { background: #f0f0f0; }
+    .ok        { background: #e6f4ea; }
+    .warning   { background: #fff4ce; }
+    .critical  { background: #fde2e1; }
+    .emergency { background: #f8b4b0; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Disk Usage Report</h1>
+  <p>Generated {{ now(fmt='%Y-%m-%d %H:%M:%S') }} &middot;
+     warning at {{ disk_warning_threshold }}%, critical at {{ disk_critical_threshold }}%,
+     emergency at {{ disk_emergency_threshold }}%</p>
+
+  <table>
+    <tr>
+      <th>Host</th><th>Mount</th><th>Type</th>
+      <th>Size</th><th>Free</th><th>Used %</th>
+    </tr>
+{% for host in groups['all'] %}
+{%   for m in hostvars[host].disk_usage | default([]) %}
+    <tr class="{{ m.level }}">
+      <td>{{ hostvars[host].tags.Name | default(host) | e }}</td>
+      <td>{{ m.mount | e }}</td>
+      <td>{{ m.fstype | e }}</td>
+      <td>{{ m.size_total | human_readable }}</td>
+      <td>{{ m.size_available | human_readable }}</td>
+      <td>{{ m.pct }}%</td>
+    </tr>
+{%   endfor %}
+{% endfor %}
+  </table>
+</body>
+</html>

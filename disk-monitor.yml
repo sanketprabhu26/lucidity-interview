@@ -1,0 +1,60 @@
+- name: Collect disk data from all servers
+  hosts: all
+  gather_facts: false
+  tasks:
+    # The bash prompt on Amazon Linux 2023 emits bracketed-paste escape codes,
+    # which the older community.aws aws_ssm plugin mixes into command output.
+    # raw needs no Python or temp files, so it works before this is fixed.
+    - name: Turn off bracketed paste on SSM targets
+      ansible.builtin.raw: >-
+        grep -qs 'enable-bracketed-paste off' /etc/inputrc ||
+        echo 'set enable-bracketed-paste off' | sudo tee -a /etc/inputrc
+      changed_when: false
+      when: "'targets' in group_names"
+
+    - name: Gather disk facts
+      ansible.builtin.setup:
+        gather_subset: ['!all', 'hardware']
+
+    - name: Keep only the mounts we care about
+      ansible.builtin.set_fact:
+        relevant_mounts: >-
+          {{ ansible_facts['mounts']
+             | rejectattr('fstype', 'in', disk_exclude_types)
+             | selectattr('size_total', 'gt', 0)
+             | selectattr('size_total', 'ge', disk_min_size_mb * 1024 * 1024)
+             | list }}
+
+    - name: Work out used % and level for each mount
+      ansible.builtin.set_fact:
+        disk_usage: "{{ disk_usage | default([]) + [item | combine({'host': inventory_hostname, 'pct': pct | float, 'level': level})] }}"
+      loop: "{{ relevant_mounts }}"
+      loop_control:
+        label: "{{ item.mount }}"
+      vars:
+        pct: "{{ ((item.size_total - item.size_available) / item.size_total * 100) | round(1) }}"
+        level: >-
+          {{ 'emergency' if pct | float >= disk_emergency_threshold
+             else 'critical' if pct | float >= disk_critical_threshold
+             else 'warning' if pct | float >= disk_warning_threshold
+             else 'ok' }}
+
+- name: Set up nginx and publish the report
+  hosts: report_server
+  gather_facts: true
+  roles:
+    - nginx
+  tasks:
+    - name: Write the report into the web root
+      ansible.builtin.template:
+        src: disk_report.html.j2
+        dest: "{{ nginx_report_root }}/index.html"
+        mode: "0644"
+
+    - name: Apply nginx changes now, before testing
+      ansible.builtin.meta: flush_handlers
+
+    - name: Check the report is being served
+      ansible.builtin.uri:
+        url: "http://localhost:{{ nginx_listen_port }}/"
+        status_code: 200
